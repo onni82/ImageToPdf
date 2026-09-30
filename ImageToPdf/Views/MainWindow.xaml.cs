@@ -8,6 +8,7 @@ using PdfSharp.Pdf.IO;
 using PdfSharp.Pdf;
 using System.Windows.Controls;
 using System.Windows;
+using System.Windows.Media;
 
 namespace ImageToPdf.Views
 {
@@ -18,6 +19,7 @@ namespace ImageToPdf.Views
     {
         private readonly ObservableCollection<PageItem> _items = new();
         private readonly PdfService _pdfService = new();
+        private System.Windows.Point _dragStartPoint;
 
         public MainWindow()
         {
@@ -29,20 +31,66 @@ namespace ImageToPdf.Views
             ExportButton.Click += ExportButton_Click;
             OpenPdfButton.Click += OpenPdfButton_Click;
 
-            // If Move buttons are not present in XAML, add them dynamically to the bottom StackPanel
+            // InsertImages button: if present in XAML attach, otherwise add dynamically to top panel
             var grid = this.Content as Grid;
             if (grid != null)
             {
-                var bottomPanel = grid.Children.OfType<StackPanel>().FirstOrDefault(sp => Grid.GetRow(sp) == 2);
-                if (bottomPanel != null)
+                var topPanel = grid.Children.OfType<StackPanel>().FirstOrDefault(sp => Grid.GetRow(sp) == 0);
+                if (topPanel != null)
                 {
-                    var moveUp = new Button { Content = "Move Up", Width = 120, Margin = new Thickness(0, 0, 8, 0) };
-                    var moveDown = new Button { Content = "Move Down", Width = 120 };
-                    moveUp.Click += MoveUpButton_Click;
-                    moveDown.Click += MoveDownButton_Click;
-                    bottomPanel.Children.Add(moveUp);
-                    bottomPanel.Children.Add(moveDown);
+                    // If InsertImagesButton is defined in XAML it will already be wired; otherwise add it
+                    if (this.FindName("InsertImagesButton") is Button existingInsert)
+                    {
+                        existingInsert.Click += InsertImagesButton_Click;
+                    }
+                    else
+                    {
+                        var insertBtn = new Button { Name = "InsertImagesButton", Content = "Insert Images...", Width = 140, Margin = new Thickness(0, 0, 8, 0) };
+                        insertBtn.Click += InsertImagesButton_Click;
+                        topPanel.Children.Insert(1, insertBtn);
+                    }
+
+                    // Add Move Up / Move Down buttons to bottom panel if not present
+                    var bottomPanel = grid.Children.OfType<StackPanel>().FirstOrDefault(sp => Grid.GetRow(sp) == 2);
+                    if (bottomPanel != null)
+                    {
+                        var moveUp = new Button { Content = "Move Up", Width = 120, Margin = new Thickness(0, 0, 8, 0) };
+                        var moveDown = new Button { Content = "Move Down", Width = 120 };
+                        moveUp.Click += MoveUpButton_Click;
+                        moveDown.Click += MoveDownButton_Click;
+                        bottomPanel.Children.Add(moveUp);
+                        bottomPanel.Children.Add(moveDown);
+                    }
                 }
+
+                // Create a simple ItemTemplate with thumbnail + name in code so we don't need to modify XAML further
+                var factory = new System.Windows.FrameworkElementFactory(typeof(System.Windows.Controls.StackPanel));
+                factory.SetValue(System.Windows.Controls.StackPanel.OrientationProperty, System.Windows.Controls.Orientation.Horizontal);
+                factory.SetValue(System.Windows.FrameworkElement.MarginProperty, new Thickness(4));
+
+                var imgFactory = new System.Windows.FrameworkElementFactory(typeof(System.Windows.Controls.Image));
+                imgFactory.SetValue(System.Windows.FrameworkElement.WidthProperty, 120.0);
+                imgFactory.SetValue(System.Windows.FrameworkElement.HeightProperty, 90.0);
+                imgFactory.SetValue(System.Windows.Controls.Image.StretchProperty, System.Windows.Media.Stretch.Uniform);
+                var imgBinding = new System.Windows.Data.Binding("FilePath") { Converter = new ImagePathToThumbnailConverter() };
+                imgFactory.SetBinding(System.Windows.Controls.Image.SourceProperty, imgBinding);
+                factory.AppendChild(imgFactory);
+
+                var txtFactory = new System.Windows.FrameworkElementFactory(typeof(System.Windows.Controls.TextBlock));
+                txtFactory.SetValue(System.Windows.FrameworkElement.VerticalAlignmentProperty, System.Windows.VerticalAlignment.Center);
+                txtFactory.SetValue(System.Windows.FrameworkElement.MarginProperty, new Thickness(8, 0, 0, 0));
+                txtFactory.SetBinding(System.Windows.Controls.TextBlock.TextProperty, new System.Windows.Data.Binding("DisplayName"));
+                factory.AppendChild(txtFactory);
+
+                var dataTemplate = new System.Windows.DataTemplate { VisualTree = factory };
+                ItemsListBox.ItemTemplate = dataTemplate;
+
+                // Enable drag & drop handlers
+                ItemsListBox.AllowDrop = true;
+                ItemsListBox.PreviewMouseLeftButtonDown += ItemsListBox_PreviewMouseLeftButtonDown;
+                ItemsListBox.MouseMove += ItemsListBox_MouseMove;
+                ItemsListBox.Drop += ItemsListBox_Drop;
+                ItemsListBox.DragOver += ItemsListBox_DragOver;
             }
         }
 
@@ -57,6 +105,23 @@ namespace ImageToPdf.Views
                 foreach (var file in dlg.FileNames)
                 {
                     _items.Add(new PageItem { FilePath = file, IsPdfPage = false });
+                }
+            }
+        }
+
+        private void InsertImagesButton_Click(object? sender, RoutedEventArgs e)
+        {
+            var dlg = new OpenFileDialog();
+            dlg.Multiselect = true;
+            dlg.Filter = "Image files|*.png;*.jpg;*.jpeg;*.bmp;*.gif|All files|*.*";
+
+            if (dlg.ShowDialog(this) == true)
+            {
+                var insertIndex = ItemsListBox.SelectedIndex >= 0 ? ItemsListBox.SelectedIndex + 1 : _items.Count;
+                foreach (var file in dlg.FileNames)
+                {
+                    _items.Insert(insertIndex, new PageItem { FilePath = file, IsPdfPage = false });
+                    insertIndex++;
                 }
             }
         }
@@ -128,6 +193,79 @@ namespace ImageToPdf.Views
                 _items.Move(idx, idx + 1);
                 ItemsListBox.SelectedIndex = idx + 1;
             }
+        }
+
+        private void ItemsListBox_PreviewMouseLeftButtonDown(object sender, System.Windows.Input.MouseButtonEventArgs e)
+        {
+            _dragStartPoint = e.GetPosition(null);
+        }
+
+        private void ItemsListBox_MouseMove(object sender, System.Windows.Input.MouseEventArgs e)
+        {
+            if (e.LeftButton != System.Windows.Input.MouseButtonState.Pressed)
+                return;
+
+            var pos = e.GetPosition(null);
+            var diff = _dragStartPoint - pos;
+            if (System.Math.Abs(diff.X) > SystemParameters.MinimumHorizontalDragDistance || System.Math.Abs(diff.Y) > SystemParameters.MinimumVerticalDragDistance)
+            {
+                if (ItemsListBox.SelectedItem is PageItem selected)
+                {
+                    var data = new DataObject("PageItem", selected);
+                    DragDrop.DoDragDrop(ItemsListBox, data, DragDropEffects.Move);
+                }
+            }
+        }
+
+        private void ItemsListBox_DragOver(object sender, DragEventArgs e)
+        {
+            if (!e.Data.GetDataPresent("PageItem"))
+                e.Effects = DragDropEffects.None;
+            else
+                e.Effects = DragDropEffects.Move;
+
+            e.Handled = true;
+        }
+
+        private void ItemsListBox_Drop(object sender, DragEventArgs e)
+        {
+            if (!e.Data.GetDataPresent("PageItem"))
+                return;
+
+            var droppedData = e.Data.GetData("PageItem") as PageItem;
+            if (droppedData == null)
+                return;
+
+            // Find target index
+            var point = e.GetPosition(ItemsListBox);
+            int index = GetCurrentIndex(point);
+            if (index < 0)
+                index = _items.Count - 1;
+
+            var oldIndex = _items.IndexOf(droppedData);
+            if (oldIndex < 0)
+                return;
+
+            // Adjust target index if removing an earlier item shifts indices
+            if (oldIndex < index) index--;
+
+            _items.Move(oldIndex, index);
+            ItemsListBox.SelectedItem = droppedData;
+        }
+
+        private int GetCurrentIndex(System.Windows.Point point)
+        {
+            for (int i = 0; i < ItemsListBox.Items.Count; i++)
+            {
+                var item = ItemsListBox.ItemContainerGenerator.ContainerFromIndex(i) as ListBoxItem;
+                if (item == null) continue;
+                var bounds = VisualTreeHelper.GetDescendantBounds(item);
+                var topLeft = item.TranslatePoint(new System.Windows.Point(), ItemsListBox);
+                var rect = new System.Windows.Rect(topLeft, bounds.Size);
+                if (rect.Contains(point))
+                    return i;
+            }
+            return -1;
         }
     }
 }
