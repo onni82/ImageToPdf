@@ -91,6 +91,7 @@ namespace ImageToPdf.Views
                 ItemsListBox.MouseMove += ItemsListBox_MouseMove;
                 ItemsListBox.Drop += ItemsListBox_Drop;
                 ItemsListBox.DragOver += ItemsListBox_DragOver;
+                ItemsListBox.ContextMenuOpening += ItemsListBox_ContextMenuOpening;
             }
         }
 
@@ -229,6 +230,42 @@ namespace ImageToPdf.Views
 
         private void ItemsListBox_Drop(object sender, DragEventArgs e)
         {
+            // Handle external file drops (from Explorer)
+            if (e.Data.GetDataPresent(DataFormats.FileDrop))
+            {
+                var files = (string[])e.Data.GetData(DataFormats.FileDrop);
+                if (files != null && files.Length > 0)
+                {
+                    var point = e.GetPosition(ItemsListBox);
+                    int index = GetCurrentIndex(point);
+                    if (index < 0) index = _items.Count;
+
+                    // Insert files at index preserving order
+                    foreach (var f in files)
+                    {
+                        // If it's a PDF, import pages, otherwise add as image
+                        var ext = System.IO.Path.GetExtension(f)?.ToLowerInvariant();
+                        if (ext == ".pdf")
+                        {
+                            // import pages at index
+                            using var doc = PdfReader.Open(f, PdfDocumentOpenMode.Import);
+                            for (int i = 0; i < doc.PageCount; i++)
+                            {
+                                _items.Insert(index++, new PageItem { FilePath = f, IsPdfPage = true, PageIndex = i });
+                            }
+                        }
+                        else
+                        {
+                            _items.Insert(index++, new PageItem { FilePath = f, IsPdfPage = false });
+                        }
+                    }
+                }
+
+                e.Handled = true;
+                return;
+            }
+
+            // Internal reordering via PageItem drag
             if (!e.Data.GetDataPresent("PageItem"))
                 return;
 
@@ -237,20 +274,127 @@ namespace ImageToPdf.Views
                 return;
 
             // Find target index
-            var point = e.GetPosition(ItemsListBox);
-            int index = GetCurrentIndex(point);
-            if (index < 0)
-                index = _items.Count - 1;
+            var pt = e.GetPosition(ItemsListBox);
+            int tgtIndex = GetCurrentIndex(pt);
+            if (tgtIndex < 0)
+                tgtIndex = _items.Count - 1;
 
             var oldIndex = _items.IndexOf(droppedData);
             if (oldIndex < 0)
                 return;
 
-            // Adjust target index if removing an earlier item shifts indices
-            if (oldIndex < index) index--;
+            if (oldIndex < tgtIndex) tgtIndex--;
 
-            _items.Move(oldIndex, index);
+            _items.Move(oldIndex, tgtIndex);
             ItemsListBox.SelectedItem = droppedData;
+        }
+
+        private void ItemsListBox_ContextMenuOpening(object sender, ContextMenuEventArgs e)
+        {
+            // Build a context menu for the item under the mouse
+            var item = ItemsListBox.SelectedItem as PageItem;
+            if (item == null)
+            {
+                e.Handled = true;
+                return;
+            }
+
+            var cm = new ContextMenu();
+
+            var miInsertBefore = new MenuItem { Header = "Insert Before..." };
+            miInsertBefore.Click += (s, ea) => Context_InsertBefore_Click(item);
+            cm.Items.Add(miInsertBefore);
+
+            var miInsertAfter = new MenuItem { Header = "Insert After..." };
+            miInsertAfter.Click += (s, ea) => Context_InsertAfter_Click(item);
+            cm.Items.Add(miInsertAfter);
+
+            cm.Items.Add(new Separator());
+
+            var miDup = new MenuItem { Header = "Duplicate" };
+            miDup.Click += (s, ea) => Context_Duplicate_Click(item);
+            cm.Items.Add(miDup);
+
+            var miExport = new MenuItem { Header = "Export Page..." };
+            miExport.Click += (s, ea) => Context_ExportSingle_Click(item);
+            cm.Items.Add(miExport);
+
+            cm.Items.Add(new Separator());
+
+            var miRemove = new MenuItem { Header = "Remove" };
+            miRemove.Click += (s, ea) => Context_Remove_Click(item);
+            cm.Items.Add(miRemove);
+
+            ItemsListBox.ContextMenu = cm;
+        }
+
+        private void Context_InsertBefore_Click(PageItem item)
+        {
+            var dlg = new OpenFileDialog();
+            dlg.Multiselect = true;
+            dlg.Filter = "Image files|*.png;*.jpg;*.jpeg;*.bmp;*.gif|All files|*.*";
+            if (dlg.ShowDialog(this) == true)
+            {
+                var idx = _items.IndexOf(item);
+                if (idx < 0) idx = _items.Count;
+                foreach (var f in dlg.FileNames)
+                {
+                    _items.Insert(idx++, new PageItem { FilePath = f, IsPdfPage = false });
+                }
+            }
+        }
+
+        private void Context_InsertAfter_Click(PageItem item)
+        {
+            var dlg = new OpenFileDialog();
+            dlg.Multiselect = true;
+            dlg.Filter = "Image files|*.png;*.jpg;*.jpeg;*.bmp;*.gif|All files|*.*";
+            if (dlg.ShowDialog(this) == true)
+            {
+                var idx = _items.IndexOf(item);
+                if (idx < 0) idx = _items.Count - 1;
+                idx++;
+                foreach (var f in dlg.FileNames)
+                {
+                    _items.Insert(idx++, new PageItem { FilePath = f, IsPdfPage = false });
+                }
+            }
+        }
+
+        private void Context_Duplicate_Click(PageItem item)
+        {
+            var idx = _items.IndexOf(item);
+            if (idx >= 0)
+            {
+                var copy = new PageItem { FilePath = item.FilePath, IsPdfPage = item.IsPdfPage, PageIndex = item.PageIndex };
+                _items.Insert(idx + 1, copy);
+            }
+        }
+
+        private void Context_ExportSingle_Click(PageItem item)
+        {
+            var dlg = new SaveFileDialog();
+            dlg.Filter = "PDF file|*.pdf";
+            dlg.FileName = System.IO.Path.GetFileNameWithoutExtension(item.FilePath) + "_page" + (item.PageIndex + 1) + ".pdf";
+            if (dlg.ShowDialog(this) == true)
+            {
+                if (item.IsPdfPage)
+                {
+                    using var outDoc = new PdfDocument();
+                    using var src = PdfReader.Open(item.FilePath, PdfDocumentOpenMode.Import);
+                    outDoc.AddPage(src.Pages[item.PageIndex]);
+                    outDoc.Save(dlg.FileName);
+                }
+                else
+                {
+                    _pdfService.CreatePdfFromImagePaths(new[] { item.FilePath }, dlg.FileName);
+                }
+            }
+        }
+
+        private void Context_Remove_Click(PageItem item)
+        {
+            _items.Remove(item);
         }
 
         private int GetCurrentIndex(System.Windows.Point point)

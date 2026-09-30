@@ -3,6 +3,8 @@ using System.Globalization;
 using System.IO;
 using System.Windows.Data;
 using System.Windows.Media.Imaging;
+using System.Windows;
+using System.Windows.Media;
 
 namespace ImageToPdf.Views
 {
@@ -31,6 +33,26 @@ namespace ImageToPdf.Views
                     bi.EndInit();
                     bi.Freeze();
                     return bi;
+                }
+
+                // Basic PDF placeholder thumbnail: render a small visual with "PDF" text
+                if (ext == ".pdf")
+                {
+                    var vb = new DrawingVisual();
+                    using (var dc = vb.RenderOpen())
+                    {
+                        dc.DrawRectangle(Brushes.LightGray, null, new Rect(0, 0, 120, 90));
+                        var ft = new FormattedText("PDF",
+                            System.Globalization.CultureInfo.InvariantCulture,
+                            FlowDirection.LeftToRight,
+                            new Typeface("Segoe UI"),
+                            24, Brushes.Black, VisualTreeHelper.GetDpi(vb).PixelsPerDip);
+                        dc.DrawText(ft, new Point(10, 30));
+                    }
+                    var rtb = new RenderTargetBitmap(120, 90, 96, 96, PixelFormats.Pbgra32);
+                    rtb.Render(vb);
+                    rtb.Freeze();
+                    return rtb;
                 }
 
                 return null;
