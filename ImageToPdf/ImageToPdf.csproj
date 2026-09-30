@@ -8,4 +8,15 @@
     <UseWPF>true</UseWPF>
   </PropertyGroup>
 
+  <ItemGroup>
+    <Folder Include="Views\" />
+    <Folder Include="ViewModels\" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.2" />
+    <PackageReference Include="PDFsharp" Version="6.2.4" />
+    <PackageReference Include="SixLabors.ImageSharp" Version="4.1.2" />
+  </ItemGroup>
+
 </Project>
