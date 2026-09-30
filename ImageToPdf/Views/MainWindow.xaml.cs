@@ -7,7 +7,6 @@ using System.Windows;
 using PdfSharp.Pdf.IO;
 using PdfSharp.Pdf;
 using System.Windows.Controls;
-using System.Windows;
 using System.Windows.Media;
 
 namespace ImageToPdf.Views

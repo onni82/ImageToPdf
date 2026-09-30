@@ -12,14 +12,15 @@ namespace ImageToPdf.Services
 {
     public interface IPdfThumbnailService
     {
-        BitmapSource RenderThumbnail(string pdfPath, int pageIndex, int width, int height);
+        BitmapSource? RenderThumbnail(string pdfPath, int pageIndex, int width, int height);
     }
 
     public class PdfThumbnailService : IPdfThumbnailService
     {
-        public BitmapSource RenderThumbnail(string pdfPath, int pageIndex, int width, int height)
+        public BitmapSource? RenderThumbnail(string pdfPath, int pageIndex, int width, int height)
         {
-            if (!File.Exists(pdfPath)) return null!;
+            if (!File.Exists(pdfPath))
+                return null;
 
             // Initialize Pdfium (no-op if already initialized)
             PdfCommon.Initialize();
@@ -44,8 +45,12 @@ namespace ImageToPdf.Services
             try
             {
                 var src = Imaging.CreateBitmapSourceFromHBitmap(hBitmap, IntPtr.Zero, Int32Rect.Empty, BitmapSizeOptions.FromWidthAndHeight(renderW, renderH));
-                src.Freeze();
-                return src;
+                if (src != null)
+                {
+                    src.Freeze();
+                    return src;
+                }
+                return null;
             }
             finally
             {

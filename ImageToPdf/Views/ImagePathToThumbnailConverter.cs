@@ -2,6 +2,7 @@ using System;
 using System.Globalization;
 using System.IO;
 using System.Windows.Data;
+using System.Diagnostics.CodeAnalysis;
 using System.Windows.Media.Imaging;
 using System.Windows;
 using System.Windows.Media;
@@ -10,6 +11,7 @@ namespace ImageToPdf.Views
 {
     public class ImagePathToThumbnailConverter : IValueConverter
     {
+        [return: MaybeNull]
         public object Convert(object value, Type targetType, object parameter, CultureInfo culture)
         {
             try
@@ -63,6 +65,7 @@ namespace ImageToPdf.Views
             }
         }
 
+        [return: MaybeNull]
         public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture)
         {
             throw new NotSupportedException();
