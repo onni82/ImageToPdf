@@ -7,6 +7,14 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <UseWPF>true</UseWPF>
     <UserSecretsId>75e42612-4451-4960-a8d0-db1f97d97b62</UserSecretsId>
+	<AssemblyTitle>Image to PDF</AssemblyTitle>
+	<AssemblyDescription>Merge images and PDF pages into a PDF</AssemblyDescription>
+	<AssemblyCompany>Onni Bucht</AssemblyCompany>
+	<AssemblyProduct>Image to PDF</AssemblyProduct>
+	<AssemblyCopyright>© 2026 Onni Bucht</AssemblyCopyright>
+	<AssemblyVersion>1.0.0.0</AssemblyVersion>
+	<FileVersion>1.0.0.0</FileVersion>
+    <GenerateAssemblyInfo>true</GenerateAssemblyInfo>
   </PropertyGroup>
 
   <ItemGroup>
