@@ -8,6 +8,9 @@ using PdfSharp.Pdf.IO;
 using PdfSharp.Pdf;
 using System.Windows.Controls;
 using System.Windows.Media;
+using System.Threading.Tasks;
+using System.Windows.Media.Imaging;
+using System;
 
 namespace ImageToPdf.Views
 {
@@ -18,6 +21,7 @@ namespace ImageToPdf.Views
     {
         private readonly ObservableCollection<PageItem> _items = new();
         private readonly PdfService _pdfService = new();
+        private readonly PdfThumbnailService _thumbService = new();
         private System.Windows.Point _dragStartPoint;
 
         public MainWindow()
@@ -71,7 +75,7 @@ namespace ImageToPdf.Views
                 imgFactory.SetValue(System.Windows.FrameworkElement.WidthProperty, 120.0);
                 imgFactory.SetValue(System.Windows.FrameworkElement.HeightProperty, 90.0);
                 imgFactory.SetValue(System.Windows.Controls.Image.StretchProperty, System.Windows.Media.Stretch.Uniform);
-                var imgBinding = new System.Windows.Data.Binding("FilePath") { Converter = new ImagePathToThumbnailConverter() };
+                var imgBinding = new System.Windows.Data.Binding("Thumbnail");
                 imgFactory.SetBinding(System.Windows.Controls.Image.SourceProperty, imgBinding);
                 factory.AppendChild(imgFactory);
 
@@ -104,7 +108,10 @@ namespace ImageToPdf.Views
             {
                 foreach (var file in dlg.FileNames)
                 {
-                    _items.Add(new PageItem { FilePath = file, IsPdfPage = false });
+                    var item = new PageItem { FilePath = file, IsPdfPage = false };
+                    _items.Add(item);
+                    // generate thumbnail asynchronously
+                    GenerateImageThumbnailAsync(item);
                 }
             }
         }
@@ -120,7 +127,9 @@ namespace ImageToPdf.Views
                 var insertIndex = ItemsListBox.SelectedIndex >= 0 ? ItemsListBox.SelectedIndex + 1 : _items.Count;
                 foreach (var file in dlg.FileNames)
                 {
-                    _items.Insert(insertIndex, new PageItem { FilePath = file, IsPdfPage = false });
+                    var item = new PageItem { FilePath = file, IsPdfPage = false };
+                    _items.Insert(insertIndex, item);
+                    GenerateImageThumbnailAsync(item);
                     insertIndex++;
                 }
             }
@@ -170,7 +179,9 @@ namespace ImageToPdf.Views
                 using var doc = PdfReader.Open(path, PdfDocumentOpenMode.Import);
                 for (int i = 0; i < doc.PageCount; i++)
                 {
-                    _items.Add(new PageItem { FilePath = path, IsPdfPage = true, PageIndex = i });
+                    var item = new PageItem { FilePath = path, IsPdfPage = true, PageIndex = i };
+                    _items.Add(item);
+                    GeneratePdfThumbnailAsync(item);
                 }
             }
         }
@@ -250,12 +261,16 @@ namespace ImageToPdf.Views
                             using var doc = PdfReader.Open(f, PdfDocumentOpenMode.Import);
                             for (int i = 0; i < doc.PageCount; i++)
                             {
-                                _items.Insert(index++, new PageItem { FilePath = f, IsPdfPage = true, PageIndex = i });
+                                var item = new PageItem { FilePath = f, IsPdfPage = true, PageIndex = i };
+                                _items.Insert(index++, item);
+                                GeneratePdfThumbnailAsync(item);
                             }
                         }
                         else
                         {
-                            _items.Insert(index++, new PageItem { FilePath = f, IsPdfPage = false });
+                            var item = new PageItem { FilePath = f, IsPdfPage = false };
+                            _items.Insert(index++, item);
+                            GenerateImageThumbnailAsync(item);
                         }
                     }
                 }
@@ -318,6 +333,10 @@ namespace ImageToPdf.Views
             miExport.Click += (s, ea) => Context_ExportSingle_Click(item);
             cm.Items.Add(miExport);
 
+            var miExportImg = new MenuItem { Header = "Export Page as Image..." };
+            miExportImg.Click += (s, ea) => Context_ExportAsImage_Click(item);
+            cm.Items.Add(miExportImg);
+
             cm.Items.Add(new Separator());
 
             var miRemove = new MenuItem { Header = "Remove" };
@@ -338,7 +357,9 @@ namespace ImageToPdf.Views
                 if (idx < 0) idx = _items.Count;
                 foreach (var f in dlg.FileNames)
                 {
-                    _items.Insert(idx++, new PageItem { FilePath = f, IsPdfPage = false });
+                    var newItem = new PageItem { FilePath = f, IsPdfPage = false };
+                    _items.Insert(idx++, newItem);
+                    GenerateImageThumbnailAsync(newItem);
                 }
             }
         }
@@ -355,7 +376,9 @@ namespace ImageToPdf.Views
                 idx++;
                 foreach (var f in dlg.FileNames)
                 {
-                    _items.Insert(idx++, new PageItem { FilePath = f, IsPdfPage = false });
+                    var newItem = new PageItem { FilePath = f, IsPdfPage = false };
+                    _items.Insert(idx++, newItem);
+                    GenerateImageThumbnailAsync(newItem);
                 }
             }
         }
@@ -366,7 +389,68 @@ namespace ImageToPdf.Views
             if (idx >= 0)
             {
                 var copy = new PageItem { FilePath = item.FilePath, IsPdfPage = item.IsPdfPage, PageIndex = item.PageIndex };
+                // copy thumbnail reference if available
+                copy.Thumbnail = item.Thumbnail;
                 _items.Insert(idx + 1, copy);
+            }
+        }
+
+        private void Context_ExportAsImage_Click(PageItem item)
+        {
+            var dlg = new SaveFileDialog();
+            dlg.Filter = "PNG Image|*.png|JPEG Image|*.jpg;*.jpeg|Bitmap Image|*.bmp";
+            var defaultName = System.IO.Path.GetFileNameWithoutExtension(item.FilePath);
+            if (item.IsPdfPage)
+                defaultName += $"_page{item.PageIndex + 1}";
+            dlg.FileName = defaultName + ".png";
+
+            if (dlg.ShowDialog(this) == true)
+            {
+                var filename = dlg.FileName;
+                var ext = System.IO.Path.GetExtension(filename).ToLowerInvariant();
+
+                try
+                {
+                    BitmapSource? bmpSrc = null;
+                    if (item.IsPdfPage)
+                    {
+                        // Render at 300 DPI for good quality
+                        bmpSrc = _thumbService.RenderPageAtDpi(item.FilePath, item.PageIndex, 300);
+                    }
+                    else
+                    {
+                        var bi = new BitmapImage();
+                        bi.BeginInit();
+                        bi.CacheOption = BitmapCacheOption.OnLoad;
+                        bi.UriSource = new Uri(item.FilePath, UriKind.Absolute);
+                        bi.EndInit();
+                        bi.Freeze();
+                        bmpSrc = bi;
+                    }
+
+                    if (bmpSrc == null)
+                    {
+                        MessageBox.Show(this, "Failed to render image.", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                        return;
+                    }
+
+                    BitmapEncoder encoder = ext switch
+                    {
+                        ".jpg" or ".jpeg" => new JpegBitmapEncoder { QualityLevel = 90 },
+                        ".bmp" => new BmpBitmapEncoder(),
+                        _ => new PngBitmapEncoder(),
+                    };
+
+                    encoder.Frames.Add(BitmapFrame.Create(bmpSrc));
+                    using var fs = System.IO.File.OpenWrite(filename);
+                    encoder.Save(fs);
+
+                    MessageBox.Show(this, "Image exported.", "Export", MessageBoxButton.OK, MessageBoxImage.Information);
+                }
+                catch (System.Exception ex)
+                {
+                    MessageBox.Show(this, "Error exporting image: " + ex.Message, "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                }
             }
         }
 
@@ -389,6 +473,45 @@ namespace ImageToPdf.Views
                     _pdfService.CreatePdfFromImagePaths(new[] { item.FilePath }, dlg.FileName);
                 }
             }
+        }
+
+        private void GenerateImageThumbnailAsync(PageItem item)
+        {
+            Task.Run(() =>
+            {
+                try
+                {
+                    var bi = new BitmapImage();
+                    bi.BeginInit();
+                    bi.CacheOption = BitmapCacheOption.OnLoad;
+                    bi.UriSource = new Uri(item.FilePath, UriKind.Absolute);
+                    bi.DecodePixelWidth = 120;
+                    bi.EndInit();
+                    bi.Freeze();
+                    Dispatcher.Invoke(() => item.Thumbnail = bi);
+                }
+                catch
+                {
+                    // ignore thumbnail errors
+                }
+            });
+        }
+
+        private void GeneratePdfThumbnailAsync(PageItem item)
+        {
+            Task.Run(() =>
+            {
+                try
+                {
+                    var bmp = _thumbService.RenderThumbnail(item.FilePath, item.PageIndex, 120, 90);
+                    if (bmp != null)
+                        Dispatcher.Invoke(() => item.Thumbnail = bmp);
+                }
+                catch
+                {
+                    // ignore
+                }
+            });
         }
 
         private void Context_Remove_Click(PageItem item)

@@ -58,6 +58,55 @@ namespace ImageToPdf.Services
             }
         }
 
+        /// <summary>
+        /// Render a PDF page to a BitmapSource at the specified DPI (pixels per inch).
+        /// </summary>
+        public BitmapSource? RenderPageAtDpi(string pdfPath, int pageIndex, int dpi)
+        {
+            if (!File.Exists(pdfPath))
+                return null;
+
+            PdfCommon.Initialize();
+
+            using var doc = PdfDocument.Load(pdfPath);
+            using var page = doc.Pages[pageIndex];
+
+            // page.Width/Height are in points (1/72 inch)
+            double widthInches = page.Width / 72.0;
+            double heightInches = page.Height / 72.0;
+
+            int renderW = Math.Max(1, (int)(widthInches * dpi));
+            int renderH = Math.Max(1, (int)(heightInches * dpi));
+
+            using var bmp = new PdfBitmap(renderW, renderH, true);
+            page.Render(bmp, 0, 0, renderW, renderH, PageRotate.Normal, RenderFlags.FPDF_LCD_TEXT);
+
+            using Bitmap sysBmp = (Bitmap)bmp.GetImage();
+            using var finalBmp = new Bitmap(renderW, renderH, System.Drawing.Imaging.PixelFormat.Format32bppPArgb);
+            using (var g = Graphics.FromImage(finalBmp))
+            {
+                g.Clear(System.Drawing.Color.White);
+                g.DrawImage(sysBmp, 0, 0, renderW, renderH);
+                g.Flush();
+            }
+
+            var hBitmap = finalBmp.GetHbitmap();
+            try
+            {
+                var src = Imaging.CreateBitmapSourceFromHBitmap(hBitmap, IntPtr.Zero, Int32Rect.Empty, BitmapSizeOptions.FromWidthAndHeight(renderW, renderH));
+                if (src != null)
+                {
+                    src.Freeze();
+                    return src;
+                }
+                return null;
+            }
+            finally
+            {
+                DeleteObject(hBitmap);
+            }
+        }
+
         [DllImport("gdi32.dll")]
         private static extern bool DeleteObject(IntPtr hObject);
     }
