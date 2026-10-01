@@ -435,17 +435,35 @@ namespace ImageToPdf.Views
                         return;
                     }
 
-                    BitmapEncoder encoder = ext switch
+                    BitmapEncoder? encoder = null;
+                    if (ext == ".jpg" || ext == ".jpeg")
                     {
-                        ".jpg" or ".jpeg" => new JpegBitmapEncoder { QualityLevel = 90 },
-                        ".tif" or ".tiff" => new TiffBitmapEncoder(),
-                        ".gif" => new GifBitmapEncoder(),
-                        _ => new PngBitmapEncoder(),
-                    };
+                        encoder = new JpegBitmapEncoder { QualityLevel = 90 };
+                    }
+                    else if (ext == ".gif")
+                    {
+                        encoder = new GifBitmapEncoder();
+                    }
+                    else if (ext == ".tif" || ext == ".tiff")
+                    {
+                        // Ask user for TIFF compression options
+                        if (!ShowTiffOptionsDialog(out var comp))
+                        {
+                            // user cancelled
+                            return;
+                        }
+                        var tiff = new TiffBitmapEncoder();
+                        tiff.Compression = comp;
+                        encoder = tiff;
+                    }
+                    else
+                    {
+                        encoder = new PngBitmapEncoder();
+                    }
 
                     encoder.Frames.Add(BitmapFrame.Create(bmpSrc));
-                    using var fs = System.IO.File.OpenWrite(filename);
-                    encoder.Save(fs);
+                    using var outputStream = System.IO.File.OpenWrite(filename);
+                    encoder.Save(outputStream);
 
                     MessageBox.Show(this, "Image exported.", "Export", MessageBoxButton.OK, MessageBoxImage.Information);
                 }
@@ -454,6 +472,27 @@ namespace ImageToPdf.Views
                     MessageBox.Show(this, "Error exporting image: " + ex.Message, "Error", MessageBoxButton.OK, MessageBoxImage.Error);
                 }
             }
+        }
+
+        private bool ShowTiffOptionsDialog(out TiffCompressOption compression)
+        {
+            var dlg = new TiffOptionsWindow { Owner = this };
+            var result = dlg.ShowDialog();
+            if (result != true)
+            {
+                compression = TiffCompressOption.None;
+                return false;
+            }
+
+            var sel = dlg.SelectedOption;
+            compression = sel switch
+            {
+                "LZW" => TiffCompressOption.Lzw,
+                "CCITT3" => TiffCompressOption.Ccitt3,
+                "CCITT4" => TiffCompressOption.Ccitt4,
+                _ => TiffCompressOption.None,
+            };
+            return true;
         }
 
         private void Context_ExportSingle_Click(PageItem item)
