@@ -102,7 +102,7 @@ namespace ImageToPdf.Views
         {
             var dlg = new OpenFileDialog();
             dlg.Multiselect = true;
-            dlg.Filter = "Image files|*.png;*.jpg;*.jpeg;*.bmp;*.gif|All files|*.*";
+            dlg.Filter = "Image files|*.png;*.jpg;*.jpeg;*.gif;*.tif;*.tiff|All files|*.*";
 
             if (dlg.ShowDialog(this) == true)
             {
@@ -120,7 +120,7 @@ namespace ImageToPdf.Views
         {
             var dlg = new OpenFileDialog();
             dlg.Multiselect = true;
-            dlg.Filter = "Image files|*.png;*.jpg;*.jpeg;*.bmp;*.gif|All files|*.*";
+            dlg.Filter = "Image files|*.png;*.jpg;*.jpeg;*.gif;*.tif;*.tiff|All files|*.*";
 
             if (dlg.ShowDialog(this) == true)
             {
@@ -334,6 +334,7 @@ namespace ImageToPdf.Views
             cm.Items.Add(miExport);
 
             var miExportImg = new MenuItem { Header = "Export Page as Image..." };
+            // Audit: keep explicit click wiring for export-as-image menu item.
             miExportImg.Click += (s, ea) => Context_ExportAsImage_Click(item);
             cm.Items.Add(miExportImg);
 
@@ -348,9 +349,9 @@ namespace ImageToPdf.Views
 
         private void Context_InsertBefore_Click(PageItem item)
         {
-            var dlg = new OpenFileDialog();
-            dlg.Multiselect = true;
-            dlg.Filter = "Image files|*.png;*.jpg;*.jpeg;*.bmp;*.gif|All files|*.*";
+                var dlg = new OpenFileDialog();
+                dlg.Multiselect = true;
+                dlg.Filter = "Image files|*.png;*.jpg;*.jpeg;*.gif;*.tif;*.tiff|All files|*.*";
             if (dlg.ShowDialog(this) == true)
             {
                 var idx = _items.IndexOf(item);
@@ -368,7 +369,7 @@ namespace ImageToPdf.Views
         {
             var dlg = new OpenFileDialog();
             dlg.Multiselect = true;
-            dlg.Filter = "Image files|*.png;*.jpg;*.jpeg;*.bmp;*.gif|All files|*.*";
+            dlg.Filter = "Image files|*.png;*.jpg;*.jpeg;*.gif;*.tif;*.tiff|All files|*.*";
             if (dlg.ShowDialog(this) == true)
             {
                 var idx = _items.IndexOf(item);
@@ -437,7 +438,8 @@ namespace ImageToPdf.Views
                     BitmapEncoder encoder = ext switch
                     {
                         ".jpg" or ".jpeg" => new JpegBitmapEncoder { QualityLevel = 90 },
-                        ".bmp" => new BmpBitmapEncoder(),
+                        ".tif" or ".tiff" => new TiffBitmapEncoder(),
+                        ".gif" => new GifBitmapEncoder(),
                         _ => new PngBitmapEncoder(),
                     };
 

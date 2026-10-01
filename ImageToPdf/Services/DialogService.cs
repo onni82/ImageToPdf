@@ -9,7 +9,7 @@ namespace ImageToPdf.Services
         {
             var dlg = new OpenFileDialog();
             dlg.Multiselect = multiSelect;
-            dlg.Filter = "Image files|*.png;*.jpg;*.jpeg;*.bmp;*.gif|All files|*.*";
+            dlg.Filter = "Image files|*.png;*.jpg;*.jpeg;*.gif;*.tif;*.tiff|All files|*.*";
             var ok = dlg.ShowDialog();
             return ok == true ? dlg.FileNames : null;
         }
