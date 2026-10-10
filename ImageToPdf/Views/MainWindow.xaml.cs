@@ -55,16 +55,29 @@ namespace ImageToPdf.Views
                     }
                 }
 
-                // Add Move Up / Move Down buttons to bottom panel if not present
-                var bottomPanel = grid.Children.OfType<StackPanel>().FirstOrDefault(sp => Grid.GetRow(sp) == 2);
-                if (bottomPanel != null)
+                // Add Move Up / Move Down buttons to bottom toolbar if not present
+                var bottomChild = grid.Children.Cast<UIElement>().FirstOrDefault(c => Grid.GetRow(c) == 2);
+                if (bottomChild != null)
                 {
-                    var moveUp = new Button { Content = "Move Up", Width = 120, Margin = new Thickness(0, 0, 8, 0) };
-                    var moveDown = new Button { Content = "Move Down", Width = 120 };
-                    moveUp.Click += MoveUpButton_Click;
-                    moveDown.Click += MoveDownButton_Click;
-                    bottomPanel.Children.Add(moveUp);
-                    bottomPanel.Children.Add(moveDown);
+                    // If bottom is a ScrollViewer -> WrapPanel, insert into WrapPanel
+                    if (bottomChild is System.Windows.Controls.ScrollViewer bsv && bsv.Content is System.Windows.Controls.WrapPanel bwp)
+                    {
+                        var moveUp = new Button { Content = "Move Up", MinWidth = 120, Margin = new Thickness(0, 0, 8, 8) };
+                        var moveDown = new Button { Content = "Move Down", MinWidth = 120, Margin = new Thickness(0, 0, 8, 8) };
+                        moveUp.Click += MoveUpButton_Click;
+                        moveDown.Click += MoveDownButton_Click;
+                        bwp.Children.Add(moveUp);
+                        bwp.Children.Add(moveDown);
+                    }
+                    else if (bottomChild is System.Windows.Controls.StackPanel bottomPanel)
+                    {
+                        var moveUp = new Button { Content = "Move Up", Width = 120, Margin = new Thickness(0, 0, 8, 0) };
+                        var moveDown = new Button { Content = "Move Down", Width = 120 };
+                        moveUp.Click += MoveUpButton_Click;
+                        moveDown.Click += MoveDownButton_Click;
+                        bottomPanel.Children.Add(moveUp);
+                        bottomPanel.Children.Add(moveDown);
+                    }
                 }
 
                 // Create a simple ItemTemplate with thumbnail + name in code so we don't need to modify XAML further

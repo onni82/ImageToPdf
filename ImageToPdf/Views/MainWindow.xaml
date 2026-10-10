@@ -27,8 +27,11 @@
 
         <!-- ItemTemplate is created in code-behind -->
 
-        <StackPanel Orientation="Horizontal" Grid.Row="2" HorizontalAlignment="Left" Margin="0,8,0,0">
-            <Button x:Name="RemoveButton" Width="120" Margin="0,0,8,0">Remove Selected</Button>
-        </StackPanel>
+        <!-- Bottom toolbar: WrapPanel inside ScrollViewer to allow wrapping when window is narrow -->
+        <ScrollViewer Grid.Row="2" HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto" Margin="0,8,0,0">
+            <WrapPanel Orientation="Horizontal" HorizontalAlignment="Left">
+                <Button x:Name="RemoveButton" MinWidth="120" Margin="0,0,8,8">Remove Selected</Button>
+            </WrapPanel>
+        </ScrollViewer>
     </Grid>
 </Window>
