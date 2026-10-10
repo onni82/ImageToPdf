@@ -34,36 +34,37 @@ namespace ImageToPdf.Views
             ExportButton.Click += ExportButton_Click;
             OpenPdfButton.Click += OpenPdfButton_Click;
 
-            // InsertImages button: if present in XAML attach, otherwise add dynamically to top panel
+            // InsertImages button: if present in XAML attach, otherwise add dynamically to top WrapPanel
             var grid = this.Content as Grid;
             if (grid != null)
             {
-                var topPanel = grid.Children.OfType<StackPanel>().FirstOrDefault(sp => Grid.GetRow(sp) == 0);
-                if (topPanel != null)
+                // If InsertImagesButton is defined in XAML it will already be wired
+                if (this.FindName("InsertImagesButton") is Button existingInsert)
                 {
-                    // If InsertImagesButton is defined in XAML it will already be wired; otherwise add it
-                    if (this.FindName("InsertImagesButton") is Button existingInsert)
+                    existingInsert.Click += InsertImagesButton_Click;
+                }
+                else
+                {
+                    // Otherwise, find top row content (ScrollViewer -> WrapPanel) and insert it dynamically
+                    var topChild = grid.Children.Cast<UIElement>().FirstOrDefault(c => Grid.GetRow(c) == 0);
+                    if (topChild is ScrollViewer sv && sv.Content is WrapPanel wp)
                     {
-                        existingInsert.Click += InsertImagesButton_Click;
-                    }
-                    else
-                    {
-                        var insertBtn = new Button { Name = "InsertImagesButton", Content = "Insert Images...", Width = 140, Margin = new Thickness(0, 0, 8, 0) };
+                        var insertBtn = new Button { Name = "InsertImagesButton", Content = "Insert Images...", MinWidth = 140, Margin = new Thickness(0, 0, 8, 8) };
                         insertBtn.Click += InsertImagesButton_Click;
-                        topPanel.Children.Insert(1, insertBtn);
+                        wp.Children.Insert(1, insertBtn);
                     }
+                }
 
-                    // Add Move Up / Move Down buttons to bottom panel if not present
-                    var bottomPanel = grid.Children.OfType<StackPanel>().FirstOrDefault(sp => Grid.GetRow(sp) == 2);
-                    if (bottomPanel != null)
-                    {
-                        var moveUp = new Button { Content = "Move Up", Width = 120, Margin = new Thickness(0, 0, 8, 0) };
-                        var moveDown = new Button { Content = "Move Down", Width = 120 };
-                        moveUp.Click += MoveUpButton_Click;
-                        moveDown.Click += MoveDownButton_Click;
-                        bottomPanel.Children.Add(moveUp);
-                        bottomPanel.Children.Add(moveDown);
-                    }
+                // Add Move Up / Move Down buttons to bottom panel if not present
+                var bottomPanel = grid.Children.OfType<StackPanel>().FirstOrDefault(sp => Grid.GetRow(sp) == 2);
+                if (bottomPanel != null)
+                {
+                    var moveUp = new Button { Content = "Move Up", Width = 120, Margin = new Thickness(0, 0, 8, 0) };
+                    var moveDown = new Button { Content = "Move Down", Width = 120 };
+                    moveUp.Click += MoveUpButton_Click;
+                    moveDown.Click += MoveDownButton_Click;
+                    bottomPanel.Children.Add(moveUp);
+                    bottomPanel.Children.Add(moveDown);
                 }
 
                 // Create a simple ItemTemplate with thumbnail + name in code so we don't need to modify XAML further
